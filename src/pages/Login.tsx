@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
+import { useUser } from "@/context/UserContext";
+import { mockUsers, currentUser } from "@/data/mockData";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -13,7 +15,9 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState(currentUser.id);
   const navigate = useNavigate();
+  const { setUser } = useUser();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,9 +26,25 @@ export default function Login() {
     // Simulate login
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
+    // Find the selected user from mockUsers or use currentUser
+    const selectedUser = mockUsers.find(u => u.id === selectedUserId) || currentUser;
+
+    // Update the UserContext with the logged-in user
+    setUser({
+      id: selectedUser.id,
+      name: selectedUser.name,
+      email: selectedUser.email,
+      avatar: selectedUser.avatar,
+      bio: selectedUser.bio,
+      followers: selectedUser.followers,
+      following: selectedUser.following,
+      blogCount: selectedUser.blogCount,
+      totalLikes: selectedUser.totalLikes,
+    });
+
     toast({
       title: "Welcome back!",
-      description: "You've successfully logged in.",
+      description: `You've successfully logged in as ${selectedUser.name}.`,
     });
 
     setIsLoading(false);
@@ -52,6 +72,23 @@ export default function Login() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Demo User Selector */}
+            <div className="space-y-2">
+              <Label htmlFor="user-select">Select Demo User</Label>
+              <select
+                id="user-select"
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {mockUsers.map(user => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">

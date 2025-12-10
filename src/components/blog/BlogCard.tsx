@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   Heart, 
   MessageCircle, 
@@ -22,6 +22,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Blog } from "@/types/blog";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "@/hooks/use-toast";
+import { useUser } from "@/context/UserContext";
 
 interface BlogCardProps {
   blog: Blog;
@@ -29,10 +31,26 @@ interface BlogCardProps {
 }
 
 export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
+  const navigate = useNavigate();
+  const { user } = useUser();
   const [isLiked, setIsLiked] = useState(blog.isLiked);
   const [likeCount, setLikeCount] = useState(blog.likes);
   const [isBookmarked, setIsBookmarked] = useState(blog.isBookmarked);
   const [showComments, setShowComments] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
+
+  // If this blog belongs to the logged-in user, use updated user info from context
+  // Otherwise use blog's author info
+  const authorInfo = useMemo(() => {
+    if (blog.authorId === user.id) {
+      return {
+        id: user.id,
+        name: user.name,
+        avatar: user.avatar,
+      };
+    }
+    return blog.author;
+  }, [blog.author, blog.authorId, user.id, user.name, user.avatar]);
 
   const handleLike = () => {
     setIsLiked(!isLiked);
@@ -45,18 +63,20 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
     return count.toString();
   };
 
+  if (isDeleted) return null;
+
   return (
     <article className="bg-card rounded-2xl shadow-md border border-border overflow-hidden transition-all duration-300 hover:shadow-lg animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between p-4">
-        <Link to={`/profile/${blog.author.id}`} className="flex items-center gap-3 group">
+        <Link to={`/profile/${authorInfo.id}`} className="flex items-center gap-3 group">
           <Avatar className="h-10 w-10 ring-2 ring-transparent group-hover:ring-primary/30 transition-all">
-            <AvatarImage src={blog.author.avatar} alt={blog.author.name} />
-            <AvatarFallback>{blog.author.name.charAt(0)}</AvatarFallback>
+            <AvatarImage src={authorInfo.avatar} alt={authorInfo.name} />
+            <AvatarFallback>{authorInfo.name.charAt(0)}</AvatarFallback>
           </Avatar>
           <div>
             <p className="font-medium text-sm group-hover:text-primary transition-colors">
-              {blog.author.name}
+              {authorInfo.name}
             </p>
             <p className="text-xs text-muted-foreground">
               {formatDistanceToNow(new Date(blog.createdAt), { addSuffix: true })}
@@ -73,12 +93,37 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
           <DropdownMenuContent align="end" className="w-48">
             {isOwner ? (
               <>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate(`/create?edit=${blog.id}`)}>
                   <Edit className="mr-2 h-4 w-4" />
                   Edit blog
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={async () => {
+                    const ok = window.confirm('Delete this blog?');
+                    if (!ok) return;
+                    try {
+                      const res = await fetch(`http://localhost:5000/api/blogs/delete/${blog.id}`, { method: 'DELETE' });
+                      const json = await res.json();
+                      if (res.ok && json.success) {
+                        toast({ title: 'Deleted', description: 'Blog deleted successfully.' });
+                        // Optimistically hide this card without reloading the page
+                        setIsDeleted(true);
+                        // Dispatch an event so parent components can react (optional)
+                        try {
+                          window.dispatchEvent(new CustomEvent('blog:deleted', { detail: { id: blog.id } }));
+                        } catch (e) {
+                          /* ignore */
+                        }
+                      } else {
+                        toast({ title: 'Error', description: json.message || 'Failed to delete blog', variant: 'destructive' });
+                      }
+                    } catch (err: any) {
+                      toast({ title: 'Error', description: err.message || 'Failed to delete blog', variant: 'destructive' });
+                    }
+                  }}
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete blog
                 </DropdownMenuItem>

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { 
   Image, 
   X, 
@@ -24,7 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { currentUser } from "@/data/mockData";
 
 const EMOJIS = ["📝", "💡", "🚀", "⚛️", "🤖", "🎨", "💻", "📱", "🌐", "🔥", "✨", "🎯"];
 
@@ -51,6 +53,8 @@ export default function CreateBlog() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [aiPrompt, setAIPrompt] = useState("");
   const [aiTone, setAITone] = useState("professional");
@@ -109,8 +113,9 @@ export default function CreateBlog() {
     });
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!title.trim() || !content.trim()) {
+      console.warn('❌ Missing fields: title or content is empty');
       toast({
         title: "Missing fields",
         description: "Please fill in the title and content.",
@@ -119,15 +124,145 @@ export default function CreateBlog() {
       return;
     }
 
-    toast({
-      title: "Blog published!",
-      description: "Your blog has been published successfully.",
+    setIsPublishing(true);
+    console.log('🚀 Starting blog creation...');
+    console.log('📝 Blog Details:', {
+      title,
+      content,
+      emoji,
+      tags,
+      authorId: currentUser.id,
+      hasImage: !!coverImage,
     });
 
-    navigate("/");
+    try {
+      // Prepare form data
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      formData.append('content', content.trim());
+      formData.append('emoji', emoji);
+      formData.append('tags', JSON.stringify(tags)); // Send as JSON string for FormData
+      // Add image file if present (data URL -> Blob)
+      if (coverImage && coverImage.startsWith('data:')) {
+        const response = await fetch(coverImage);
+        const blob = await response.blob();
+        formData.append('image', blob, 'cover-image.png');
+        console.log('📸 Image file added to FormData');
+      }
+
+      // If editing, send PUT to update endpoint, otherwise POST to create
+      const url = editingId
+        ? `http://localhost:5000/api/blogs/update/${editingId}`
+        : 'http://localhost:5000/api/blogs/create';
+      const method = editingId ? 'PUT' : 'POST';
+
+      console.log(`📦 Sending ${method} request to ${url}...`);
+
+      const fetchResponse = await fetch(url, {
+        method,
+        body: formData,
+      });
+
+      const data = await fetchResponse.json();
+      console.log('📬 Response Status:', fetchResponse.status);
+      console.log('📊 Response Data:', data);
+
+      if (fetchResponse.ok && data.success) {
+        console.log('✅ Blog created successfully!');
+        const newId = data.data._id || data.data.id;
+        console.log('🎉 New Blog ID:', newId);
+        if (data.data.image) {
+          console.log('🖼️  Image uploaded:', data.data.image);
+        }
+
+        // Show toast with action to view the created post
+        toast({
+          title: "Blog published! 🎉",
+          description: "Your blog has been published successfully.",
+          action: (
+            <ToastAction asChild altText="View the published blog post">
+              <a href={`/blog/${newId}`}>View post</a>
+            </ToastAction>
+          ),
+        });
+
+        // Clear form
+        setTitle('');
+        setContent('');
+        setEmoji('📝');
+        setTags([]);
+        setCoverImage(null);
+        setEditingId(null);
+
+        // Redirect to either the blog detail (edit) or home (new)
+        setTimeout(() => {
+          if (editingId) {
+            console.log('🔄 Redirecting to updated blog...');
+            navigate(`/blog/${newId}`, { replace: true });
+          } else {
+            console.log('🔄 Redirecting to home...');
+            navigate('/', { replace: true });
+          }
+        }, 900);
+      } else {
+        console.error('❌ Blog creation failed!');
+        console.error('Error message:', data.message);
+        console.error('Full error:', data);
+        toast({
+          title: "Error",
+          description: data.message || "Failed to create blog",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('❌ Exception during blog creation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create blog. Check console for details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
+  // Support edit mode: read ?edit=<id> and prefill
+  const location = useLocation();
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    const editId = sp.get('edit');
+    if (!editId) return;
+
+    let mounted = true;
+    const fetchBlog = async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/blogs/${editId}`);
+        const json = await res.json();
+        if (res.ok && json.success) {
+          const b = json.data;
+          if (!mounted) return;
+          setEditingId(editId);
+          setTitle(b.title || '');
+          setContent(b.content || '');
+          setEmoji(b.emoji || '📝');
+          setTags(Array.isArray(b.tags) ? b.tags : []);
+          // If there is an existing image url, set it so user sees current cover
+          if (b.image) setCoverImage(b.image);
+        } else {
+          toast({ title: 'Error', description: json.message || 'Failed to load blog for edit', variant: 'destructive' });
+        }
+      } catch (err: any) {
+        toast({ title: 'Error', description: err.message || 'Failed to load blog for edit', variant: 'destructive' });
+      }
+    };
+
+    fetchBlog();
+
+    return () => { mounted = false; };
+  }, [location.search, navigate]);
+
   const handleSaveDraft = () => {
+    console.log('💾 Saving draft...');
     toast({
       title: "Draft saved",
       description: "Your blog has been saved as a draft.",
@@ -152,9 +287,22 @@ export default function CreateBlog() {
               <Save className="h-4 w-4 mr-2" />
               Save Draft
             </Button>
-            <Button variant="gradient" onClick={handlePublish}>
-              <Send className="h-4 w-4 mr-2" />
-              Publish
+            <Button 
+              variant="gradient" 
+              onClick={handlePublish}
+              disabled={isPublishing}
+            >
+              {isPublishing ? (
+                <>
+                  <span className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Publish
+                </>
+              )}
             </Button>
           </div>
         </div>

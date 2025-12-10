@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { 
   MapPin, 
@@ -17,24 +17,128 @@ import { BlogCard } from "@/components/blog/BlogCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockBlogs, mockUsers, currentUser } from "@/data/mockData";
+import { mockUsers, currentUser } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Blog } from "@/types/blog";
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  bio?: string;
+  location?: string;
+  website?: string;
+  followers: number;
+  following: number;
+  blogCount: number;
+  totalLikes: number;
+  createdAt: string;
+}
 
 export default function Profile() {
   const { userId } = useParams();
   const [isFollowing, setIsFollowing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [userBlogs, setUserBlogs] = useState<Blog[]>([]);
+  const [likedBlogs, setLikedBlogs] = useState<Blog[]>([]);
 
-  // Find user - if no userId or "current", show current user
-  const user = userId === "current" || !userId 
-    ? currentUser 
-    : mockUsers.find((u) => u.id === userId) || currentUser;
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        setLoading(true);
+        
+        // Determine which user ID to fetch
+        const targetUserId = userId === "current" || !userId ? currentUser.id : userId;
+        
+        // Fetch user profile
+        const profileResponse = await fetch(`http://localhost:5000/api/profiles/${targetUserId}`);
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          const userData = {
+            id: profileData.data.user._id,
+            name: profileData.data.user.name,
+            email: profileData.data.user.email,
+            avatar: profileData.data.profilePicture || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop',
+            bio: profileData.data.bio || '',
+            location: profileData.data.location || '',
+            website: profileData.data.website || '',
+            followers: profileData.data.followers?.length || 0,
+            following: profileData.data.following?.length || 0,
+            blogCount: profileData.data.totalBlogs || 0,
+            totalLikes: profileData.data.totalLikes || 0,
+            createdAt: profileData.data.createdAt || new Date().toISOString(),
+          };
+          setUser(userData);
+        } else {
+          // Fallback to mock user if API fails
+          const mockUser = mockUsers.find((u) => u.id === targetUserId) || currentUser;
+          setUser({
+            id: mockUser.id,
+            name: mockUser.name,
+            email: mockUser.email,
+            avatar: mockUser.avatar,
+            bio: mockUser.bio,
+            location: mockUser.location,
+            website: mockUser.website,
+            followers: mockUser.followers,
+            following: mockUser.following,
+            blogCount: mockUser.blogCount,
+            totalLikes: mockUser.totalLikes,
+            createdAt: mockUser.createdAt,
+          });
+        }
+
+        // Fetch all blogs and filter by user
+        const blogsResponse = await fetch('http://localhost:5000/api/blogs/all');
+        if (blogsResponse.ok) {
+          const blogsData = await blogsResponse.json();
+          const allBlogs = blogsData.data || [];
+          const targetUserId2 = userId === "current" || !userId ? currentUser.id : userId;
+          const targetBlogsForUser = allBlogs.filter((blog: Blog) => blog.authorId === targetUserId2);
+          setUserBlogs(targetBlogsForUser);
+          setLikedBlogs(allBlogs.filter((blog: Blog) => blog.isLiked));
+          
+          // Compute blog count and total likes from user's blogs
+          const computedBlogCount = targetBlogsForUser.length;
+          const computedTotalLikes = targetBlogsForUser.reduce((sum, blog) => sum + (blog.likes || 0), 0);
+          
+          // Update user stats with computed values
+          setUser(prev => prev ? { ...prev, blogCount: computedBlogCount, totalLikes: computedTotalLikes } : null);
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!user) {
+    return (
+      <MainLayout>
+        <div className="text-center py-12">
+          <p className="text-lg font-medium">User not found</p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const isOwnProfile = user.id === currentUser.id;
-
-  // Filter blogs for this user
-  const userBlogs = mockBlogs.filter((blog) => blog.authorId === user.id);
-  const likedBlogs = mockBlogs.filter((blog) => blog.isLiked);
 
   const formatCount = (count: number) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;

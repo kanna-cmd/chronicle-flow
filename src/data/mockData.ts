@@ -206,9 +206,9 @@ export const mockFollowSuggestions: FollowSuggestion[] = [
 ];
 
 export const currentUser: User = {
-  id: "current",
-  name: "John Doe",
-  email: "john@example.com",
+  id: "6937ff250e2bdd44e4739f8b",
+  name: "Arun Kumar",
+  email: "arun@example.com",
   avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
   bio: "Building cool stuff with code 💻",
   location: "Austin, TX",
