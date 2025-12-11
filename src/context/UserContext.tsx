@@ -1,5 +1,4 @@
 import React, { createContext, useState, useContext, ReactNode } from "react";
-import { currentUser } from "@/data/mockData";
 
 export interface User {
   id: string;
@@ -14,7 +13,8 @@ export interface User {
 }
 
 interface UserContextType {
-  user: User;
+  user: User | null;
+  safeUser: User;
   updateUser: (updates: Partial<User>) => void;
   setUser: (user: User) => void;
 }
@@ -22,31 +22,32 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUserState] = useState<User>({
-    id: currentUser.id,
-    name: currentUser.name,
-    email: currentUser.email,
-    avatar: currentUser.avatar,
-    bio: currentUser.bio,
-    followers: currentUser.followers,
-    following: currentUser.following,
-    blogCount: currentUser.blogCount,
-    totalLikes: currentUser.totalLikes,
-  });
+  const [user, setUserState] = useState<User | null>(null);
+
+  const defaultUser: User = {
+    id: '',
+    name: '',
+    email: '',
+    avatar: '',
+    bio: '',
+    followers: 0,
+    following: 0,
+    blogCount: 0,
+    totalLikes: 0,
+  };
+
+  const safeUser: User = user ?? defaultUser;
 
   const updateUser = (updates: Partial<User>) => {
-    setUserState(prev => ({ ...prev, ...updates }));
-    // Also update the mock data so it persists
-    Object.assign(currentUser, updates);
+    setUserState(prev => prev ? { ...prev, ...updates } : null);
   };
 
   const setUser = (newUser: User) => {
     setUserState(newUser);
-    Object.assign(currentUser, newUser);
   };
 
   return (
-    <UserContext.Provider value={{ user, updateUser, setUser }}>
+    <UserContext.Provider value={{ user, safeUser, updateUser, setUser }}>
       {children}
     </UserContext.Provider>
   );

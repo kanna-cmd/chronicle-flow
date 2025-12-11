@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { useUser } from "@/context/UserContext";
-import { mockUsers, currentUser } from "@/data/mockData";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -15,40 +14,139 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState(currentUser.id);
   const navigate = useNavigate();
   const { setUser } = useUser();
+
+  // Validate email format
+  const isValidEmail = (emailToCheck: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(emailToCheck);
+  };
+
+  // Validate password strength
+  const isValidPassword = (passwordToCheck: string) => {
+    return passwordToCheck.length >= 6;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Validate email field
+    if (!email || email.trim() === "") {
+      toast({
+        title: "Email Required",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
 
-    // Find the selected user from mockUsers or use currentUser
-    const selectedUser = mockUsers.find(u => u.id === selectedUserId) || currentUser;
+    // Validate email format
+    if (!isValidEmail(email)) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address (e.g., user@example.com).",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
 
-    // Update the UserContext with the logged-in user
-    setUser({
-      id: selectedUser.id,
-      name: selectedUser.name,
-      email: selectedUser.email,
-      avatar: selectedUser.avatar,
-      bio: selectedUser.bio,
-      followers: selectedUser.followers,
-      following: selectedUser.following,
-      blogCount: selectedUser.blogCount,
-      totalLikes: selectedUser.totalLikes,
-    });
+    // Validate password field
+    if (!password || password.trim() === "") {
+      toast({
+        title: "Password Required",
+        description: "Please enter your password.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
 
-    toast({
-      title: "Welcome back!",
-      description: `You've successfully logged in as ${selectedUser.name}.`,
-    });
+    // Validate password length
+    if (!isValidPassword(password)) {
+      toast({
+        title: "Invalid Password",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
 
-    setIsLoading(false);
-    navigate("/");
+    // Call login API endpoint
+    try {
+      const response = await fetch("http://localhost:5000/api/users/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email: email.toLowerCase(),
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        toast({
+          title: "❌ Login Failed",
+          description: data.message || "Email or password is incorrect. Please check your credentials and try again.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Normalize backend response shapes and guard against undefined
+      const userFromResponse =
+        (data && (data.data?.user ?? data.data ?? data.user ?? data)) || null;
+
+      if (!userFromResponse || (!userFromResponse._id && !userFromResponse.id)) {
+        toast({
+          title: "❌ Login Failed",
+          description: data.message || "Login succeeded but user data is missing from the response.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Pick id whether it's `_id` (Mongo) or `id`
+      const userId = userFromResponse._id || userFromResponse.id;
+
+      setUser({
+        id: userId,
+        name: userFromResponse.name || userFromResponse.fullName || "",
+        email: userFromResponse.email || "",
+        avatar: userFromResponse.avatar || "",
+        bio: userFromResponse.bio || "",
+        followers: userFromResponse.followers || 0,
+        following: userFromResponse.following || 0,
+        blogCount: userFromResponse.blogCount || 0,
+        totalLikes: userFromResponse.totalLikes || 0,
+      });
+
+      toast({
+        title: "✅ Welcome back!",
+        description: `You've successfully logged in as ${userFromResponse.name || userFromResponse.email}.`,
+      });
+
+      setIsLoading(false);
+      navigate("/");
+    } catch (error) {
+      console.error("Login error:", error);
+      toast({
+        title: "❌ Connection Error",
+        description: "Unable to connect to the server. Please check your connection and try again.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -72,23 +170,6 @@ export default function Login() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Demo User Selector */}
-            <div className="space-y-2">
-              <Label htmlFor="user-select">Select Demo User</Label>
-              <select
-                id="user-select"
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                {mockUsers.map(user => (
-                  <option key={user.id} value={user.id}>
-                    {user.name} ({user.email})
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Heart,
@@ -7,90 +7,18 @@ import {
   Share2,
   Trash2,
   CheckCheck,
+  Bell,
 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
+import { useNotifications } from "@/context/NotificationProvider";
 import { formatDistanceToNow } from "date-fns";
 
-interface Notification {
-  id: string;
-  type: "like" | "comment" | "follow" | "share";
-  user: {
-    id: string;
-    name: string;
-    avatar: string;
-  };
-  message: string;
-  blogId?: string;
-  blogTitle?: string;
-  createdAt: string;
-  read: boolean;
-}
-
 export default function Notifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, clearAll } = useNotifications();
   const [filter, setFilter] = useState<"all" | "unread">("all");
-
-  useEffect(() => {
-    // Load mock notifications
-    const mockNotifications: Notification[] = [
-      {
-        id: "1",
-        type: "like",
-        user: { id: "1", name: "Sarah Chen", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=face" },
-        message: "liked your blog",
-        blogId: "blog1",
-        blogTitle: "Getting Started with React",
-        createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-        read: false,
-      },
-      {
-        id: "2",
-        type: "comment",
-        user: { id: "2", name: "Alex Kumar", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face" },
-        message: "commented on your blog",
-        blogId: "blog2",
-        blogTitle: "Web Development Tips",
-        createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-        read: false,
-      },
-      {
-        id: "3",
-        type: "follow",
-        user: { id: "3", name: "Jordan Smith", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face" },
-        message: "started following you",
-        createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-        read: false,
-      },
-      {
-        id: "4",
-        type: "share",
-        user: { id: "4", name: "Emma Wilson", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face" },
-        message: "shared your blog",
-        blogId: "blog3",
-        blogTitle: "JavaScript Best Practices",
-        createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-        read: true,
-      },
-      {
-        id: "5",
-        type: "like",
-        user: { id: "5", name: "Mike Johnson", avatar: "https://images.unsplash.com/photo-1500595046891-98c1f73e9b18?w=150&h=150&fit=crop&crop=face" },
-        message: "liked your blog",
-        blogId: "blog4",
-        blogTitle: "CSS Mastery",
-        createdAt: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
-        read: true,
-      },
-    ];
-
-    setNotifications(mockNotifications);
-    setLoading(false);
-  }, []);
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -107,40 +35,10 @@ export default function Notifications() {
     }
   };
 
-  const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-    toast({ title: "All notifications marked as read" });
-  };
-
-  const deleteNotification = (id: string) => {
-    setNotifications(notifications.filter(n => n.id !== id));
-  };
-
-  const clearAll = () => {
-    setNotifications([]);
-    toast({ title: "All notifications cleared" });
-  };
-
   const filteredNotifications =
     filter === "unread"
       ? notifications.filter(n => !n.read)
       : notifications;
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
-  if (loading) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center py-12">
-          <p className="text-muted-foreground">Loading notifications...</p>
-        </div>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout>
@@ -207,36 +105,36 @@ export default function Notifications() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <Link
-                      to={`/profile/${notification.user.id}`}
+                      to={`/profile/${notification.actor.id}`}
                       className="hover:text-primary transition-colors"
                     >
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={notification.user.avatar} alt={notification.user.name} />
-                        <AvatarFallback>{notification.user.name.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={notification.actor.avatar} alt={notification.actor.name} />
+                        <AvatarFallback>{notification.actor.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                     </Link>
                     <div>
                       <Link
-                        to={`/profile/${notification.user.id}`}
+                        to={`/profile/${notification.actor.id}`}
                         className="font-medium hover:text-primary transition-colors"
                       >
-                        {notification.user.name}
+                        {notification.actor.name}
                       </Link>
                       <span className="text-muted-foreground ml-1">{notification.message}</span>
                     </div>
                   </div>
 
-                  {notification.blogId && notification.blogTitle && (
+                  {notification.targetBlog && notification.targetBlog.title && (
                     <Link
-                      to={`/blog/${notification.blogId}`}
+                      to={`/blog/${notification.targetBlog.id}`}
                       className="text-sm text-primary hover:underline block truncate"
                     >
-                      "{notification.blogTitle}"
+                      "{notification.targetBlog.title}"
                     </Link>
                   )}
 
                   <p className="text-xs text-muted-foreground mt-1">
-                    {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true })}
                   </p>
                 </div>
 

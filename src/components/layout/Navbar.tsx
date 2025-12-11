@@ -10,7 +10,8 @@ import {
   X,
   Compass,
   LogOut,
-  Settings
+  Settings,
+  MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,12 +25,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/context/UserContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { RealtimeStatusIndicator } from "@/components/RealtimeStatusIndicator";
+import { useChatList } from "@/hooks/useChatList";
 
 export function Navbar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { user } = useUser();
+  const { chats } = useChatList();
+
+  // Calculate total unread messages
+  const totalUnreadMessages = chats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
 
   const navItems = [
     { path: "/", icon: Home, label: "Home" },
@@ -85,6 +93,24 @@ export function Navbar() {
               </Link>
             ))}
 
+            {/* Realtime Status Indicator */}
+            <RealtimeStatusIndicator />
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Messages */}
+            <Link to="/messages">
+              <Button variant="ghost" size="icon" className="relative">
+                <MessageCircle className="h-5 w-5" />
+                {totalUnreadMessages > 0 && (
+                  <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                    {totalUnreadMessages > 9 ? '9+' : totalUnreadMessages}
+                  </span>
+                )}
+              </Button>
+            </Link>
+
             {/* Notifications */}
             <Link to="/notifications">
               <Button variant="ghost" size="icon" className="relative">
@@ -93,49 +119,60 @@ export function Navbar() {
               </Button>
             </Link>
 
-            {/* User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full ml-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 animate-slide-down">
-                <div className="flex items-center gap-3 p-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col">
-                    <span className="font-medium text-sm">{user.name}</span>
-                    <span className="text-xs text-muted-foreground">{user.email}</span>
+            {/* User Menu - show user menu when logged in, otherwise show Login/Register */}
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full ml-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.avatar || ''} alt={user?.name || 'User'} />
+                      <AvatarFallback>{user?.name ? user.name.charAt(0) : '?'}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 animate-slide-down">
+                  <div className="flex items-center gap-3 p-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={user?.avatar || ''} alt={user?.name || 'User'} />
+                      <AvatarFallback>{user?.name ? user.name.charAt(0) : '?'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{user?.name || 'Unknown'}</span>
+                      <span className="text-xs text-muted-foreground">{user?.email || ''}</span>
+                    </div>
                   </div>
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to={`/profile/${user.id}`} className="cursor-pointer">
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/settings" className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/login" className="cursor-pointer text-destructive">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Log out
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to={`/profile/${user.id}`} className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings" className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/login" className="cursor-pointer text-destructive">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Log out
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">Login</Button>
+                </Link>
+                <Link to="/register">
+                  <Button variant="default" size="sm">Sign up</Button>
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -191,7 +228,13 @@ export function Navbar() {
                   </Button>
                 </Link>
               ))}
-              <Link to={`/profile/${currentUser.id}`} onClick={() => setIsMobileMenuOpen(false)}>
+              <Link to="/messages" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className="w-full justify-start">
+                  <MessageCircle className="mr-2 h-5 w-5" />
+                  Messages
+                </Button>
+              </Link>
+              <Link to={`/profile/${user?.id}`} onClick={() => setIsMobileMenuOpen(false)}>
                 <Button variant="ghost" className="w-full justify-start">
                   <User className="mr-2 h-5 w-5" />
                   Profile

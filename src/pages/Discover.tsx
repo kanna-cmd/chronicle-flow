@@ -1,22 +1,99 @@
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { BlogCard } from "@/components/blog/BlogCard";
-import { FollowSuggestionCard } from "@/components/suggestions/FollowSuggestionCard";
-import { TrendingCreators } from "@/components/suggestions/TrendingCreators";
-import { mockBlogs, mockUsers, mockFollowSuggestions } from "@/data/mockData";
-import { Compass, TrendingUp, Users, Hash, Sparkles } from "lucide-react";
+import { Compass, Hash, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { BlogCard } from "@/components/blog/BlogCard";
+import { getTrendingBlogs, getTrendingInCategory } from "@/lib/trendingAlgorithm";
+import { toast } from "@/hooks/use-toast";
+import { Blog } from "@/types/blog";
+import { useRealtimeUpdates } from "@/hooks/useRealtimeUpdates";
 
 export default function Discover() {
-  const trendingTags = [
-    { tag: "AI", count: "12.5K" },
-    { tag: "React", count: "8.2K" },
-    { tag: "TypeScript", count: "6.8K" },
-    { tag: "Design", count: "5.4K" },
-    { tag: "Startups", count: "4.9K" },
-    { tag: "Web3", count: "4.1K" },
-    { tag: "Remote Work", count: "3.7K" },
-    { tag: "Productivity", count: "3.2K" },
+  const [allBlogs, setAllBlogs] = useState<Blog[]>([]);
+  const [trendingBlogs, setTrendingBlogs] = useState<Blog[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Enable real-time updates
+  useRealtimeUpdates();
+
+  const categories = [
+    { tag: "AI", icon: "🤖" },
+    { tag: "React", icon: "⚛️" },
+    { tag: "TypeScript", icon: "📘" },
+    { tag: "Design", icon: "🎨" },
+    { tag: "Startups", icon: "🚀" },
+    { tag: "Web3", icon: "🌐" },
+    { tag: "Remote Work", icon: "💼" },
+    { tag: "Productivity", icon: "⚡" },
   ];
+
+  // Normalize API response to Blog type
+  const normalizeBlog = (rawBlog: any): Blog => ({
+    id: rawBlog._id || rawBlog.id || '',
+    title: rawBlog.title || '',
+    content: rawBlog.content || '',
+    emoji: rawBlog.emoji || '📝',
+    coverImage: rawBlog.image || rawBlog.coverImage || '',
+    tags: rawBlog.tags || [],
+    authorId: rawBlog.authorId || rawBlog.author?._id || rawBlog.author?.id || '',
+    author: rawBlog.author ? {
+      id: rawBlog.author._id || rawBlog.author.id || '',
+      name: rawBlog.author.name || 'Unknown',
+      avatar: rawBlog.author.avatar || '',
+    } : { id: '', name: 'Unknown', avatar: '' },
+    likes: Array.isArray(rawBlog.likes) ? rawBlog.likes.length : (rawBlog.likes || 0),
+    comments: Array.isArray(rawBlog.comments) ? rawBlog.comments.length : (rawBlog.comments || 0),
+    shares: Array.isArray(rawBlog.shares) ? rawBlog.shares.length : (rawBlog.shares || 0),
+    isLiked: false,
+    isBookmarked: false,
+    createdAt: rawBlog.createdAt || new Date().toISOString(),
+    updatedAt: rawBlog.updatedAt || new Date().toISOString(),
+  });
+
+  useEffect(() => {
+    const fetchAndTrend = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('http://localhost:5000/api/blogs/all', {
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const rawBlogs = data.data || [];
+          const normalizedBlogs = rawBlogs.map(normalizeBlog);
+          setAllBlogs(normalizedBlogs);
+          
+          if (selectedCategory) {
+            const categoryTrending = getTrendingInCategory(normalizedBlogs, selectedCategory, 20);
+            setTrendingBlogs(categoryTrending);
+          } else {
+            const trending = getTrendingBlogs(normalizedBlogs).slice(0, 20);
+            setTrendingBlogs(trending);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch blogs:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load trending content',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAndTrend();
+  }, [selectedCategory]);
+
+  const trendingTags = categories.map((cat, idx) => {
+    const blogsInTag = allBlogs.filter((blog) =>
+      blog.tags?.some((tag) => tag.toLowerCase().includes(cat.tag.toLowerCase()))
+    ).length;
+    return { ...cat, count: blogsInTag };
+  });
 
   return (
     <MainLayout>
@@ -34,49 +111,29 @@ export default function Discover() {
           </div>
         </div>
 
-        {/* Trending Creators Carousel */}
-        <section className="mb-8 animate-fade-in">
-          <TrendingCreators creators={mockUsers} />
-        </section>
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-8 space-y-8">
             {/* Trending Blogs */}
             <section>
               <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <h2 className="font-display font-semibold text-xl">Trending Now</h2>
-              </div>
-              <div className="space-y-6">
-                {mockBlogs.slice(0, 3).map((blog, index) => (
-                  <div
-                    key={blog.id}
-                    style={{ animationDelay: `${index * 100}ms` }}
-                    className="animate-slide-up"
-                  >
-                    <BlogCard blog={blog} />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Editor's Picks */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="h-5 w-5 text-accent" />
-                <h2 className="font-display font-semibold text-xl">Editor's Picks</h2>
+                <h2 className="font-display font-semibold text-xl">
+                  {selectedCategory ? `Trending in ${selectedCategory}` : "Trending Now"}
+                </h2>
               </div>
               <div className="space-y-6">
-                {mockBlogs.slice(3).map((blog, index) => (
-                  <div
-                    key={blog.id}
-                    style={{ animationDelay: `${index * 100}ms` }}
-                    className="animate-slide-up"
-                  >
-                    <BlogCard blog={blog} />
-                  </div>
-                ))}
+                {loading ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Loading trending content...</p>
+                ) : trendingBlogs.length > 0 ? (
+                  trendingBlogs.map((blog) => (
+                    <BlogCard key={blog.id} blog={blog} />
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No trending content yet in this category
+                  </p>
+                )}
               </div>
             </section>
           </div>
@@ -87,47 +144,31 @@ export default function Discover() {
             <div className="bg-card rounded-2xl border border-border p-5 animate-fade-in">
               <div className="flex items-center gap-2 mb-4">
                 <Hash className="h-5 w-5 text-primary" />
-                <h3 className="font-display font-semibold text-lg">Trending Tags</h3>
+                <h3 className="font-display font-semibold text-lg">Explore Categories</h3>
               </div>
               <div className="space-y-3">
-                {trendingTags.map((item, index) => (
-                  <div
+                {trendingTags.map((item) => (
+                  <button
                     key={item.tag}
-                    className="flex items-center justify-between p-2 rounded-lg hover:bg-secondary/50 cursor-pointer transition-colors"
+                    onClick={() =>
+                      setSelectedCategory(
+                        selectedCategory === item.tag ? null : item.tag
+                      )
+                    }
+                    className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                      selectedCategory === item.tag
+                        ? 'bg-primary/10 border border-primary'
+                        : 'hover:bg-secondary/50 border border-transparent'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-muted-foreground text-sm w-4">
-                        {index + 1}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className="hover:bg-primary/10 hover:text-primary"
-                      >
-                        #{item.tag}
-                      </Badge>
+                      <span className="text-lg">{item.icon}</span>
+                      <span className="font-medium">{item.tag}</span>
                     </div>
                     <span className="text-sm text-muted-foreground">
-                      {item.count} posts
+                      {item.count}
                     </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Suggested Users */}
-            <div className="bg-card rounded-2xl border border-border p-5 animate-fade-in">
-              <div className="flex items-center gap-2 mb-4">
-                <Users className="h-5 w-5 text-primary" />
-                <h3 className="font-display font-semibold text-lg">
-                  Based on Your Interests
-                </h3>
-              </div>
-              <div className="space-y-4">
-                {mockFollowSuggestions.map((suggestion) => (
-                  <FollowSuggestionCard
-                    key={suggestion.user.id}
-                    suggestion={suggestion}
-                  />
+                  </button>
                 ))}
               </div>
             </div>

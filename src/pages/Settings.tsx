@@ -43,6 +43,7 @@ export default function Settings() {
       // Update profile data (simple PUT to profile update endpoint)
       const res = await fetch(`http://localhost:5000/api/profiles/${user.id}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -73,6 +74,7 @@ export default function Settings() {
         fd.append('profilePicture', avatarFile);
         const up = await fetch(`http://localhost:5000/api/profiles/${user.id}/picture`, {
           method: 'POST',
+          credentials: 'include',
           body: fd,
         });
         let upJson: any = null;

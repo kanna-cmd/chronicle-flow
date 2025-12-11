@@ -37,20 +37,24 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
   const [likeCount, setLikeCount] = useState(blog.likes);
   const [isBookmarked, setIsBookmarked] = useState(blog.isBookmarked);
   const [showComments, setShowComments] = useState(false);
-  const [isDeleted, setIsDeleted] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentCountLocal, setCommentCountLocal] = useState<number>(
+    typeof blog.comments === 'number' ? blog.comments : 0
+  );
 
   // If this blog belongs to the logged-in user, use updated user info from context
   // Otherwise use blog's author info
   const authorInfo = useMemo(() => {
-    if (blog.authorId === user.id) {
+    if (user && blog.authorId === user.id) {
       return {
         id: user.id,
         name: user.name,
         avatar: user.avatar,
       };
     }
-    return blog.author;
-  }, [blog.author, blog.authorId, user.id, user.name, user.avatar]);
+    return blog.author || { id: '', name: 'Unknown', avatar: '' };
+  }, [blog.author, blog.authorId, user?.id, user?.name, user?.avatar]);
 
   const handleLike = () => {
     setIsLiked(!isLiked);
@@ -63,7 +67,38 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
     return count.toString();
   };
 
-  if (isDeleted) return null;
+  async function submitQuickComment() {
+    if (!commentText.trim()) return;
+    if (!blog.id) return;
+    if (!user) {
+      toast({ title: 'Sign in', description: 'Please sign in to post a comment.' });
+      return;
+    }
+
+    try {
+      setSubmittingComment(true);
+      const res = await fetch(`http://localhost:5000/api/blogs/${blog.id}/comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ text: commentText }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCommentCountLocal((c) => c + 1);
+        setCommentText('');
+        toast({ title: 'Comment posted', description: 'Your comment was added.' });
+      } else {
+        toast({ title: 'Error', description: data.message || 'Failed to post comment', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      console.error('Comment error:', err);
+      toast({ title: 'Error', description: err.message || 'Failed to post comment', variant: 'destructive' });
+    } finally {
+      setSubmittingComment(false);
+    }
+  }
 
   return (
     <article className="bg-card rounded-2xl shadow-md border border-border overflow-hidden transition-all duration-300 hover:shadow-lg animate-fade-in">
@@ -101,26 +136,35 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
                 <DropdownMenuItem
                   className="text-destructive"
                   onClick={async () => {
-                    const ok = window.confirm('Delete this blog?');
-                    if (!ok) return;
+                    const confirmed = window.confirm('Are you sure you want to delete this blog? This action cannot be undone.');
+                    if (!confirmed) return;
+
                     try {
-                      const res = await fetch(`http://localhost:5000/api/blogs/delete/${blog.id}`, { method: 'DELETE' });
+                      const res = await fetch(`http://localhost:5000/api/blogs/delete/${blog.id}`, { method: 'DELETE', credentials: 'include' });
                       const json = await res.json();
+                      
                       if (res.ok && json.success) {
-                        toast({ title: 'Deleted', description: 'Blog deleted successfully.' });
-                        // Optimistically hide this card without reloading the page
-                        setIsDeleted(true);
-                        // Dispatch an event so parent components can react (optional)
-                        try {
-                          window.dispatchEvent(new CustomEvent('blog:deleted', { detail: { id: blog.id } }));
-                        } catch (e) {
-                          /* ignore */
-                        }
+                        toast({ 
+                          title: '✅ Blog Deleted', 
+                          description: 'Your blog has been deleted successfully.' 
+                        });
+                        
+                        // Reload the page to fetch updated blog list
+                        window.location.reload();
                       } else {
-                        toast({ title: 'Error', description: json.message || 'Failed to delete blog', variant: 'destructive' });
+                        toast({ 
+                          title: '❌ Error', 
+                          description: json.message || 'Failed to delete blog', 
+                          variant: 'destructive' 
+                        });
                       }
                     } catch (err: any) {
-                      toast({ title: 'Error', description: err.message || 'Failed to delete blog', variant: 'destructive' });
+                      console.error('Delete error:', err);
+                      toast({ 
+                        title: '❌ Error', 
+                        description: err.message || 'Failed to delete blog', 
+                        variant: 'destructive' 
+                      });
                     }
                   }}
                 >
@@ -188,7 +232,7 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
         {/* Engagement Stats */}
         <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
           <span>{formatCount(likeCount)} likes</span>
-          <span>{formatCount(blog.comments)} comments</span>
+          <span>{formatCount(commentCountLocal)} comments</span>
           <span>{formatCount(blog.shares)} shares</span>
         </div>
 
@@ -251,16 +295,29 @@ export function BlogCard({ blog, isOwner = false }: BlogCardProps) {
           <div className="mt-4 pt-4 border-t border-border animate-slide-up">
             <div className="flex items-center gap-3">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarImage src={user?.avatar || authorInfo.avatar} />
+                <AvatarFallback>{(user?.name || authorInfo.name || 'U').charAt(0)}</AvatarFallback>
               </Avatar>
               <input
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    await submitQuickComment();
+                  }
+                }}
                 type="text"
                 placeholder="Write a comment..."
                 className="flex-1 bg-secondary/50 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
               />
-              <Button size="sm" className="rounded-full">
-                Post
+              <Button
+                size="sm"
+                className="rounded-full"
+                onClick={submitQuickComment}
+                disabled={submittingComment || !commentText.trim()}
+              >
+                {submittingComment ? 'Posting...' : 'Post'}
               </Button>
             </div>
           </div>

@@ -26,7 +26,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { currentUser } from "@/data/mockData";
+import { useUser } from "@/context/UserContext";
 
 const EMOJIS = ["📝", "💡", "🚀", "⚛️", "🤖", "🎨", "💻", "📱", "🌐", "🔥", "✨", "🎯"];
 
@@ -46,6 +46,7 @@ const LENGTHS = [
 
 export default function CreateBlog() {
   const navigate = useNavigate();
+  const { user } = useUser();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [emoji, setEmoji] = useState("📝");
@@ -131,7 +132,6 @@ export default function CreateBlog() {
       content,
       emoji,
       tags,
-      authorId: currentUser.id,
       hasImage: !!coverImage,
     });
 
@@ -161,10 +161,27 @@ export default function CreateBlog() {
       const fetchResponse = await fetch(url, {
         method,
         body: formData,
+        credentials: 'include',
       });
 
-      const data = await fetchResponse.json();
       console.log('📬 Response Status:', fetchResponse.status);
+
+      // Parse JSON safely — backend may sometimes return HTML on errors
+      let data: any = null;
+      try {
+        const text = await fetchResponse.text();
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          // Not JSON
+          console.error('CreateBlog: response is not JSON, raw text:', text.slice(0, 100));
+          data = { success: false, message: 'Server returned non-JSON response', raw: text };
+        }
+      } catch (err) {
+        console.error('Error reading response body:', err);
+        data = { success: false, message: 'Failed to read server response' };
+      }
+
       console.log('📊 Response Data:', data);
 
       if (fetchResponse.ok && data.success) {

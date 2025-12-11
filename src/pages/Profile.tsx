@@ -8,6 +8,7 @@ import {
   UserPlus, 
   Check,
   Share2,
+  MessageCircle,
   Grid,
   Heart,
   Settings
@@ -17,10 +18,11 @@ import { BlogCard } from "@/components/blog/BlogCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockUsers, currentUser } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Blog } from "@/types/blog";
+import { useUser } from "@/context/UserContext";
+import { useNavigate } from "react-router-dom";
 
 interface UserProfile {
   id: string;
@@ -39,6 +41,8 @@ interface UserProfile {
 
 export default function Profile() {
   const { userId } = useParams();
+  const navigate = useNavigate();
+  const { user: currentUser } = useUser();
   const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -51,10 +55,12 @@ export default function Profile() {
         setLoading(true);
         
         // Determine which user ID to fetch
-        const targetUserId = userId === "current" || !userId ? currentUser.id : userId;
+        const targetUserId = userId === "current" || !userId ? currentUser?.id : userId;
         
         // Fetch user profile
-        const profileResponse = await fetch(`http://localhost:5000/api/profiles/${targetUserId}`);
+        const profileResponse = await fetch(`http://localhost:5000/api/profiles/${targetUserId}`, {
+          credentials: 'include',
+        });
         if (profileResponse.ok) {
           const profileData = await profileResponse.json();
           const userData = {
@@ -73,30 +79,20 @@ export default function Profile() {
           };
           setUser(userData);
         } else {
-          // Fallback to mock user if API fails
-          const mockUser = mockUsers.find((u) => u.id === targetUserId) || currentUser;
-          setUser({
-            id: mockUser.id,
-            name: mockUser.name,
-            email: mockUser.email,
-            avatar: mockUser.avatar,
-            bio: mockUser.bio,
-            location: mockUser.location,
-            website: mockUser.website,
-            followers: mockUser.followers,
-            following: mockUser.following,
-            blogCount: mockUser.blogCount,
-            totalLikes: mockUser.totalLikes,
-            createdAt: mockUser.createdAt,
-          });
+          // Cannot fetch without targetUserId
+          console.error('No user ID to fetch');
+          setLoading(false);
+          return;
         }
 
         // Fetch all blogs and filter by user
-        const blogsResponse = await fetch('http://localhost:5000/api/blogs/all');
+        const blogsResponse = await fetch('http://localhost:5000/api/blogs/all', {
+          credentials: 'include',
+        });
         if (blogsResponse.ok) {
           const blogsData = await blogsResponse.json();
           const allBlogs = blogsData.data || [];
-          const targetUserId2 = userId === "current" || !userId ? currentUser.id : userId;
+          const targetUserId2 = userId === "current" || !userId ? currentUser?.id : userId;
           const targetBlogsForUser = allBlogs.filter((blog: Blog) => blog.authorId === targetUserId2);
           setUserBlogs(targetBlogsForUser);
           setLikedBlogs(allBlogs.filter((blog: Blog) => blog.isLiked));
@@ -138,7 +134,7 @@ export default function Profile() {
     );
   }
 
-  const isOwnProfile = user.id === currentUser.id;
+  const isOwnProfile = user?.id === currentUser?.id;
 
   const formatCount = (count: number) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
@@ -210,6 +206,14 @@ export default function Profile() {
                           Follow
                         </>
                       )}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => navigate(`/messages?user=${user.id}`)}
+                      title="Send message"
+                    >
+                      <MessageCircle className="h-5 w-5" />
                     </Button>
                     <Button variant="outline" size="icon">
                       <Share2 className="h-5 w-5" />
