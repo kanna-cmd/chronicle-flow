@@ -95,6 +95,45 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId, onClose, onDelet
 
   const otherParticipant = chat.participants.find((p) => p._id !== currentUser?.id);
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !chatId) return;
+
+    // Validate file is an image
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const uploadRes = await fetch(`http://localhost:5000/api/chats/${chatId}/upload-image`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      if (uploadData.success && uploadData.imageUrl) {
+        // Send image as a message with the image URL
+        await sendMessage(`[IMAGE]${uploadData.imageUrl}`);
+      } else {
+        alert('Failed to upload image');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Error uploading image');
+    } finally {
+      setUploading(false);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageText.trim() || sending) return;
@@ -213,7 +252,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId, onClose, onDelet
                   </Avatar>
                   <div className={`flex flex-col gap-1 max-w-xs ${isOwn ? 'items-end' : ''}`}>
                     <div className={`px-3 py-2 rounded-lg ${isOwn ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-900'}`}>
-                      <p className="text-sm">{msg.content}</p>
+                      {msg.content.startsWith('[IMAGE]') ? (
+                        <img
+                          src={msg.content.replace('[IMAGE]', '')}
+                          alt="Shared image"
+                          className="max-w-xs rounded-lg"
+                        />
+                      ) : (
+                        <p className="text-sm">{msg.content}</p>
+                      )}
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
